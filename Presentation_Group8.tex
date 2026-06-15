@@ -132,23 +132,24 @@
     \end{block}
 \end{frame}
 
-\begin{frame}{我们把重点放在三条实现线索}
+\begin{frame}{对标要求：覆盖情况与实现亮点}
     \begin{table}
     \centering
     \small
-    \begin{tabular}{p{2.6cm}p{3.9cm}p{5.0cm}}
+    \begin{tabular}{p{2.9cm}p{4.4cm}p{4.4cm}}
         \toprule
-        \textbf{线索} & \textbf{代码落点} & \textbf{值得讲的点} \\
+        \textbf{要求项} & \textbf{完成情况} & \textbf{实现亮点} \\
         \midrule
-        语法覆盖 & \texttt{parser.rs, ast.rs} & 覆盖引用、数组、元组、表达式块和三类循环 \\
-        语义状态 & \texttt{compiler.rs} & 作用域栈、可变性、返回类型、循环栈同时参与检查 \\
-        IR 线性化 & \texttt{ir.rs, compiler.rs} & 临时变量承接表达式，标签和跳转承接结构化控制流 \\
+        大作业 1 必做语法 & 规则覆盖到 5.1 & 递归下降解析和 AST 构造 \\
+        大作业 1 扩展结构 & 引用、数组、元组、表达式块、三类循环 & 统一保留到 AST 节点 \\
+        大作业 2 语义诊断 & 类型、可变性、返回、循环控制检查 & 符号表栈、循环栈、错误汇总 \\
+        大作业 2 中间代码 & 生成四元式 IR & 临时变量、标签和跳转 \\
         \bottomrule
     \end{tabular}
     \end{table}
     \vspace{0.2em}
     \centering
-    源程序先变成 AST，再完成语义检查，最后生成四元式 IR。
+    两个作业共用 AST 作为衔接点，语义检查和 IR 生成在其上继续展开。
 \end{frame}
 
 \begin{frame}{代码入口：第一份 AST 被第二份继续消费}
@@ -268,7 +269,7 @@ pub enum Expr {
     \begin{table}
     \centering
     \small
-    \begin{tabular}{p{2.7cm}p{3.9cm}p{4.9cm}}
+    \begin{tabular}{p{2.5cm}p{5.1cm}p{4.9cm}}
         \toprule
         \textbf{产物} & \textbf{包含的信息} & \textbf{给作业 2 的价值} \\
         \midrule
