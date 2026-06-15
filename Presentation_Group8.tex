@@ -25,6 +25,34 @@
 \setbeamercolor{block body}{bg=softblue}
 \setbeamertemplate{navigation symbols}{}
 
+% Berlin/miniframes 默认包含 section 与 subsection 两条顶部导航；
+% 本报告没有 subsection，覆盖模板以去掉空白导航行。
+\setbeamertemplate{headline}{%
+  \begin{beamercolorbox}[colsep=1.2pt]{upper separation line head}
+  \end{beamercolorbox}
+  \begin{beamercolorbox}{section in head/foot}
+    \vskip2.3ex
+    \vskip-\baselineskip
+    \insertnavigation{\paperwidth}%
+    \vskip1.0ex
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[colsep=1.2pt]{lower separation line head}
+  \end{beamercolorbox}
+}
+
+% 将 Berlin 默认的两行页脚合并为一行。
+\setbeamertemplate{footline}{%
+  \begin{beamercolorbox}[colsep=1.2pt]{upper separation line foot}
+  \end{beamercolorbox}
+  \begin{beamercolorbox}[wd=\paperwidth,ht=2.7ex,dp=1ex]{author in head/foot}
+    \hspace*{.35cm}%
+    \makebox[.30\paperwidth][l]{\usebeamerfont{author in head/foot}\insertshortauthor}%
+    \makebox[.34\paperwidth][c]{\usebeamerfont{title in head/foot}编译原理大作业}%
+    \makebox[\dimexpr.36\paperwidth-.7cm\relax][r]{\usebeamerfont{page number in head/foot}\insertframenumber{} / \inserttotalframenumber}%
+    \hspace*{.35cm}%
+  \end{beamercolorbox}%
+}
+
 \lstdefinelanguage{RustLike}{
     morekeywords={fn, let, mut, if, else, while, for, in, loop, break, continue, return, i32},
     sensitive=true,
@@ -55,14 +83,6 @@
     basicstyle=\ttfamily\tiny
 }
 
-\newcommand{\speaker}[2]{%
-    \vspace{-0.4em}
-    \begin{flushright}
-        \scriptsize\color{mainblue}\textbf{讲者：#1}\quad 建议用时：#2
-    \end{flushright}
-    \vspace{-0.7em}
-}
-
 \title[编译原理大作业 1 \& 2]{编译原理大作业 1 \& 2}
 \subtitle{类 Rust 语言的词法/语法分析、语义分析与四元式中间代码生成}
 \author[李堂辉, 高胜寒, 冉子易]{2351078 李堂辉 \\ 2351837 高胜寒 \\ 2352197 冉子易\\
@@ -77,7 +97,6 @@
 \end{frame}
 
 \begin{frame}{汇报主线：两个作业是一条编译流程}
-    \speaker{冉子易}{25 秒}
     \begin{center}
     \resizebox{0.95\linewidth}{!}{
     \begin{tikzpicture}[
@@ -114,26 +133,7 @@
     \end{table}
 \end{frame}
 
-\begin{frame}{8 分钟分工}
-    \speaker{冉子易}{20 秒}
-    \begin{table}
-    \centering
-    \small
-    \begin{tabular}{p{2.2cm}p{2.0cm}p{7.6cm}}
-        \toprule
-        \textbf{讲者} & \textbf{时间} & \textbf{技术内容} \\
-        \midrule
-        冉子易 & 0:00--2:00 & 两个作业关系；大作业 1 的 Token、Lexer、递归下降 Parser、AST。\\
-        高胜寒 & 2:00--4:00 & 大作业 2 的语义分析：符号表栈、作用域、类型检查、可变性检查、错误收集。\\
-        李堂辉 & 4:00--6:00 & 四元式 IR 设计、表达式翻译、控制流翻译、测试结果和总结。\\
-        全员 & 6:00--8:00 & 按模块问答：前端 / 语义 / IR 分别回答。\\
-        \bottomrule
-    \end{tabular}
-    \end{table}
-\end{frame}
-
 \begin{frame}{核心文件地图}
-    \speaker{冉子易}{20 秒}
     \begin{table}
     \centering
     \small
@@ -154,7 +154,6 @@
 \section{大作业 1：词法与语法分析}
 
 \begin{frame}{大作业 1 的目标与范围}
-    \speaker{冉子易}{20 秒}
     \begin{columns}[T]
     \begin{column}{0.48\textwidth}
         \begin{block}{输入}
@@ -182,7 +181,6 @@
 \end{frame}
 
 \begin{frame}{词法分析：从字符流到 Token}
-    \speaker{冉子易}{25 秒}
     \begin{columns}[T]
     \begin{column}{0.56\textwidth}
         \begin{itemize}
@@ -208,8 +206,26 @@
     \end{columns}
 \end{frame}
 
+\begin{frame}{词法扫描决策表}
+    \begin{table}
+    \centering
+    \small
+    \begin{tabular}{p{2.6cm}p{4.2cm}p{4.5cm}}
+        \toprule
+        \textbf{首字符/模式} & \textbf{扫描动作} & \textbf{Token 结果} \\
+        \midrule
+        字母或 \texttt{\_} & 连续读入字母、数字、下划线，再查关键字表 & 关键字或 \texttt{Ident(String)} \\
+        数字 & 连续读入数字并转为整数 & \texttt{IntLiteral(i64)} \\
+        \texttt{= ! < > - .} & 前瞻一个字符，区分单字符和双字符符号 & \texttt{= == != <= >= -> . ..} \\
+        \texttt{/} & 前瞻判断注释或除号 & 跳过注释或生成 \texttt{Slash} \\
+        空白符 & 更新行列号，不生成 Token & 无 \\
+        其他字符 & 生成词法错误，带行列号 & 错误信息 \\
+        \bottomrule
+    \end{tabular}
+    \end{table}
+\end{frame}
+
 \begin{frame}[fragile]{Token 设计：枚举直接表达语法类别}
-    \speaker{冉子易}{25 秒}
     \begin{lstlisting}[style=code]
 pub enum TokenKind {
     Fn, Let, Mut, If, Else, While, For, In, Loop,
@@ -230,7 +246,6 @@ pub enum TokenKind {
 \end{frame}
 
 \begin{frame}{语法分析：递归下降 + 优先级分层}
-    \speaker{冉子易}{30 秒}
     \begin{columns}[T]
     \begin{column}{0.52\textwidth}
         \begin{block}{递归下降}
@@ -259,8 +274,37 @@ pub enum TokenKind {
     \end{columns}
 \end{frame}
 
+\begin{frame}{Parser 调用层次}
+    \begin{center}
+    \resizebox{0.95\linewidth}{!}{
+    \begin{tikzpicture}[
+        node distance=0.75cm,
+        box/.style={rectangle, rounded corners, draw=mainblue, thick, minimum width=3.0cm, minimum height=0.65cm, align=center, fill=softblue},
+        arr/.style={-{Latex[length=2.5mm]}, thick, draw=mainblue}
+    ]
+        \node[box] (program) {\texttt{parse\_program}};
+        \node[box, below=of program] (decl) {\texttt{parse\_function\_decl}};
+        \node[box, below left=0.65cm and 1.8cm of decl] (block) {\texttt{parse\_block}};
+        \node[box, below right=0.65cm and 1.8cm of decl] (type) {\texttt{parse\_type}};
+        \node[box, below=of block] (stmt) {\texttt{parse\_statement}};
+        \node[box, below=of stmt] (expr) {\texttt{parse\_expression}};
+        \node[box, below left=0.65cm and 1.0cm of expr] (cmp) {比较/加减/乘除};
+        \node[box, below right=0.65cm and 1.0cm of expr] (post) {调用/索引/字段};
+        \draw[arr] (program) -- (decl);
+        \draw[arr] (decl) -- (block);
+        \draw[arr] (decl) -- (type);
+        \draw[arr] (block) -- (stmt);
+        \draw[arr] (stmt) -- (expr);
+        \draw[arr] (expr) -- (cmp);
+        \draw[arr] (expr) -- (post);
+    \end{tikzpicture}}
+    \end{center}
+    \vspace{-0.2em}
+    \scriptsize
+    结构解析和表达式解析分层：语句层负责控制流和声明，表达式层负责优先级和操作数结合。
+\end{frame}
+
 \begin{frame}[fragile]{AST：把语法结构保留下来}
-    \speaker{冉子易}{20 秒}
     \begin{columns}[T]
     \begin{column}{0.49\textwidth}
         \begin{lstlisting}[style=tinycode]
@@ -285,8 +329,25 @@ fn add(mut a:i32, b:i32) -> i32 {
     \end{block}
 \end{frame}
 
+\begin{frame}{AST 节点分类}
+    \begin{table}
+    \centering
+    \small
+    \begin{tabular}{p{2.6cm}p{4.0cm}p{4.9cm}}
+        \toprule
+        \textbf{节点族} & \textbf{典型节点} & \textbf{保留的信息} \\
+        \midrule
+        顶层结构 & \texttt{Program, Declaration} & 函数声明列表 \\
+        函数结构 & \texttt{FunctionDecl, Param, Block} & 函数名、参数、返回类型、语句块 \\
+        语句 & \texttt{VarDecl, Assign, If, While, Return} & 控制流、声明、赋值和返回 \\
+        表达式 & \texttt{BinaryOp, Call, Index, Ref, Deref} & 操作符、操作数、调用参数、访问路径 \\
+        类型 & \texttt{I32, Array, Tuple, Ref, MutRef} & 语义分析需要的静态类型 \\
+        \bottomrule
+    \end{tabular}
+    \end{table}
+\end{frame}
+
 \begin{frame}{大作业 1 数据流}
-    \speaker{冉子易}{20 秒}
     \begin{center}
     \resizebox{0.92\linewidth}{!}{
     \begin{tikzpicture}[
@@ -321,7 +382,6 @@ fn add(mut a:i32, b:i32) -> i32 {
 \section{大作业 2：语义分析}
 
 \begin{frame}{大作业 2 在大作业 1 基础上的扩展}
-    \speaker{高胜寒}{20 秒}
     \begin{center}
     \resizebox{0.9\linewidth}{!}{
     \begin{tikzpicture}[
@@ -354,7 +414,6 @@ fn add(mut a:i32, b:i32) -> i32 {
 \end{frame}
 
 \begin{frame}[fragile]{符号表：用作用域栈模拟变量生命周期}
-    \speaker{高胜寒}{30 秒}
     \begin{columns}[T]
     \begin{column}{0.48\textwidth}
         \begin{lstlisting}[style=tinycode]
@@ -382,7 +441,6 @@ struct Compiler {
 \end{frame}
 
 \begin{frame}{作用域查询：从内到外}
-    \speaker{高胜寒}{25 秒}
     \begin{columns}[T]
     \begin{column}{0.43\textwidth}
         \begin{center}
@@ -417,7 +475,6 @@ struct Compiler {
 \end{frame}
 
 \begin{frame}{语义检查覆盖点}
-    \speaker{高胜寒}{30 秒}
     \begin{table}
     \centering
     \small
@@ -437,7 +494,6 @@ struct Compiler {
 \end{frame}
 
 \begin{frame}[fragile]{语义错误示例}
-    \speaker{高胜寒}{25 秒}
     \begin{columns}[T]
     \begin{column}{0.48\textwidth}
         \begin{lstlisting}[style=tinycode]
@@ -464,10 +520,27 @@ fn test_break_outside_loop() {
     \end{columns}
 \end{frame}
 
+\begin{frame}{语义分析状态表}
+    \begin{table}
+    \centering
+    \scriptsize
+    \begin{tabular}{p{3.2cm}p{4.2cm}p{4.2cm}}
+        \toprule
+        \textbf{状态} & \textbf{类型} & \textbf{用途} \\
+        \midrule
+        \texttt{scopes} & \texttt{Vec<HashMap<...>>} & 变量声明、类型、可变性和作用域 \\
+        \texttt{current\_}\\\texttt{return\_type} & \texttt{Option<Type>} & 检查 \texttt{return} 是否匹配函数签名 \\
+        \texttt{loop\_stack} & 标签栈 & 判断 \texttt{break/continue} 合法性并生成跳转目标 \\
+        \texttt{errors} & \texttt{Vec<String>} & 汇总语义错误，避免只报第一个错误 \\
+        \texttt{temp\_count}\\\texttt{label\_count} & 计数器 & 分配临时变量和控制流标签 \\
+        \bottomrule
+    \end{tabular}
+    \end{table}
+\end{frame}
+
 \section{大作业 2：四元式中间代码}
 
 \begin{frame}{第三部分：四元式 IR}
-    \speaker{李堂辉}{15 秒}
     \begin{center}
     \resizebox{0.88\linewidth}{!}{
     \begin{tikzpicture}[
@@ -499,7 +572,6 @@ fn test_break_outside_loop() {
 \end{frame}
 
 \begin{frame}[fragile]{四元式数据结构}
-    \speaker{李堂辉}{30 秒}
     \begin{columns}[T]
     \begin{column}{0.48\textwidth}
         \begin{lstlisting}[style=tinycode]
@@ -537,7 +609,6 @@ pub struct Quadruple {
 \end{frame}
 
 \begin{frame}{IR 指令族}
-    \speaker{李堂辉}{20 秒}
     \begin{table}
     \centering
     \scriptsize
@@ -554,8 +625,25 @@ pub struct Quadruple {
     \end{table}
 \end{frame}
 
+\begin{frame}{Statement 到 IR 的映射}
+    \begin{table}
+    \centering
+    \small
+    \begin{tabular}{p{2.8cm}p{4.0cm}p{4.7cm}}
+        \toprule
+        \textbf{AST 语句} & \textbf{生成逻辑} & \textbf{主要 IR} \\
+        \midrule
+        变量声明赋值 & 先翻译右值，再声明变量并赋值 & \texttt{ASSIGN} \\
+        普通赋值 & 检查左值可写，再翻译右值 & \texttt{ASSIGN / DEREF\_ASSIGN} \\
+        返回语句 & 检查返回类型，发射返回指令 & \texttt{RETURN} \\
+        \texttt{if/else} & 条件失败跳转到 else，then 结束跳到 end & \texttt{JUMP\_IF\_FALSE, JUMP, LABEL} \\
+        \texttt{while/loop} & 建立起止标签，循环体后跳回开始 & \texttt{LABEL, JUMP, JUMP\_IF\_FALSE} \\
+        \bottomrule
+    \end{tabular}
+    \end{table}
+\end{frame}
+
 \begin{frame}[fragile]{表达式翻译：递归生成临时变量}
-    \speaker{李堂辉}{30 秒}
     \begin{columns}[T]
     \begin{column}{0.4\textwidth}
         \begin{lstlisting}[style=code]
@@ -582,7 +670,6 @@ let mut c = a + b * 2;
 \end{frame}
 
 \begin{frame}[fragile]{if 翻译：条件跳转 + 两个标签}
-    \speaker{李堂辉}{25 秒}
     \begin{columns}[T]
     \begin{column}{0.4\textwidth}
         \begin{lstlisting}[style=tinycode]
@@ -609,7 +696,6 @@ L1:
 \end{frame}
 
 \begin{frame}[fragile]{while/loop 翻译：循环栈管理 break 和 continue}
-    \speaker{李堂辉}{35 秒}
     \begin{lstlisting}[style=tinycode]
 let start_label = self.new_label();
 let end_label = self.new_label();
@@ -632,8 +718,37 @@ emit(Label,       -,        -, Label(end_label));
     \end{itemize}
 \end{frame}
 
+\begin{frame}{循环控制标签}
+    \begin{columns}[T]
+    \begin{column}{0.46\textwidth}
+        \begin{block}{循环入口}
+            \centering
+            \texttt{start\_label}
+        \end{block}
+        \begin{itemize}
+            \item \texttt{while}：重新判断条件
+            \item \texttt{loop}：直接继续下一轮
+            \item \texttt{continue}：跳到这里
+        \end{itemize}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+        \begin{block}{循环出口}
+            \centering
+            \texttt{end\_label}
+        \end{block}
+        \begin{itemize}
+            \item 条件失败跳到这里
+            \item \texttt{break} 跳到这里
+            \item 循环结束后的下一条指令
+        \end{itemize}
+    \end{column}
+    \end{columns}
+    \vspace{0.4em}
+    \centering
+    \texttt{loop\_stack.push((start\_label, end\_label, None))}
+\end{frame}
+
 \begin{frame}[fragile]{函数调用翻译：参数先入 IR}
-    \speaker{李堂辉}{25 秒}
     \begin{columns}[T]
     \begin{column}{0.38\textwidth}
         \begin{lstlisting}[style=code]
@@ -666,7 +781,6 @@ foo(a, 1 + b)
 \end{frame}
 
 \begin{frame}{测试与结果}
-    \speaker{李堂辉}{25 秒}
     \begin{columns}[T]
     \begin{column}{0.48\textwidth}
         \begin{block}{大作业 1}
@@ -689,25 +803,24 @@ foo(a, 1 + b)
     \end{columns}
 \end{frame}
 
-\begin{frame}{问答分派}
-    \speaker{李堂辉}{15 秒}
+\begin{frame}{测试矩阵}
     \begin{table}
     \centering
-    \small
+    \scriptsize
     \begin{tabular}{p{3.0cm}p{4.2cm}p{4.5cm}}
         \toprule
-        \textbf{问题方向} & \textbf{负责回答} & \textbf{关键词} \\
+        \textbf{测试文件} & \textbf{覆盖内容} & \textbf{观察输出} \\
         \midrule
-        词法/语法/AST & 冉子易 & Token、递归下降、优先级、AST 节点 \\
-        语义分析 & 高胜寒 & 符号表、作用域、类型、可变性 \\
-        IR/控制流/测试 & 李堂辉 & 四元式、临时变量、标签、循环栈 \\
+        \texttt{test\_all.rs.txt} & 函数、声明、表达式、分支、循环、数组、元组 & Token、AST、IR 序列 \\
+        \texttt{test\_errors}\\\texttt{.rs.txt} & 词法/语法错误 & 带行列号的错误信息 \\
+        \texttt{test\_semantic}\\\texttt{\_errors.rs.txt} & 未声明变量、类型不匹配、不可变赋值、非法控制流 & \texttt{[Semantic Error]} 列表 \\
+        \texttt{cargo check} & Rust 工程可编译性 & 两个工程均无编译错误 \\
         \bottomrule
     \end{tabular}
     \end{table}
 \end{frame}
 
 \begin{frame}{总结}
-    \speaker{李堂辉}{20 秒}
     \begin{block}{最终完成的编译流程}
         \centering
         源码 $\rightarrow$ Token $\rightarrow$ AST $\rightarrow$ 语义检查 $\rightarrow$ 四元式 IR
