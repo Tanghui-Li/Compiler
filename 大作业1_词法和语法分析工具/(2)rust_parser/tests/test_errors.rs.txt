@@ -1,0 +1,39 @@
+// 语义错误测试用例
+
+// 1. 给不可变变量赋值
+fn error_immut_assign() {
+    let x = 10;
+    x = 20; // 应该报错：不能给不可变左值进行赋值
+}
+
+// 2. 类型不匹配：声明为 i32 赋元组值
+fn error_type_mismatch_decl() {
+    let x: i32 = (1, 2); // 应该报错：类型不匹配
+}
+
+// 3. 赋值类型不匹配
+fn error_type_mismatch_assign() {
+    let mut x = 10;
+    x = (1, 2); // 应该报错：赋值类型不匹配
+}
+
+// 4. 不可迭代对象循环
+fn error_not_iterable() {
+    let x = 10;
+    for i in x { // 应该报错：表达式不可迭代
+    }
+}
+
+// 5. 对不可变引用进行写操作
+fn error_immut_ref_assign(ptr: &i32) {
+    *ptr = 10; // 应该报错：不能给不可变左值进行赋值
+}
+
+// 6. 作用域外访问变量 (语法分析原本就不支持，此处验证报错)
+fn error_scope() {
+    {
+        let x = 1;
+    }
+    let y = x; // 应该报错：未定义的变量 (在 get_expr_type 中处理为默认类型，但通常语义检查应捕获)
+}
+#

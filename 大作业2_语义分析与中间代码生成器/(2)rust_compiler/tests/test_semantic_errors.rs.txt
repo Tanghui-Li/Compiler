@@ -1,0 +1,47 @@
+// ===== 语义分析错误测试 =====
+
+// 1. 变量未声明
+fn test_undeclared() {
+    a = 1;
+}
+
+// 2. 类型不一致
+fn test_type_mismatch() {
+    let mut a: i32 = 1;
+    let mut b: [i32; 3] = [1, 2, 3];
+    a = b;
+}
+
+// 3. 不可变变量被二次赋值
+fn test_immutable_assign() {
+    let a: i32 = 1;
+    a = 2;
+}
+
+// 4. 二元运算类型不匹配
+fn test_binop_mismatch() {
+    let mut a: i32 = 1;
+    let mut b: (i32, i32) = (1, 2);
+    let mut c = a + b;
+}
+
+// 5. break/continue 不在循环体内
+fn test_break_outside_loop() {
+    break;
+    continue;
+}
+
+// 6. 函数返回值不匹配
+fn test_return_mismatch() -> i32 {
+    return ;
+}
+
+fn test_return_mismatch_2() {
+    return 1;
+}
+
+// 7. 解引用非引用类型
+fn test_invalid_deref() {
+    let a = 1;
+    let b = *a;
+}

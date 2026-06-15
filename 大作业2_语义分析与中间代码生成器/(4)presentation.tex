@@ -1,0 +1,417 @@
+\documentclass[aspectratio=169]{ctexbeamer}
+
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{listings}
+\usepackage{xeCJK}
+
+\usetikzlibrary{positioning, shapes.multipart, arrows.meta, bending, decorations.pathreplacing, trees, automata}
+\makeatletter
+\def\input@path{{/windows/Users/TanghuiLi/Desktop/latexenv/}}
+\makeatother
+\usetheme{tongji}
+\graphicspath{{~/}}
+
+% Define colors for code syntax highlighting
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.98,0.98,0.95}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\tiny\ttfamily,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+\lstdefinelanguage{RustLike}{
+    morekeywords={fn, let, mut, if, else, while, for, in, loop, break, continue, return, i32},
+    sensitive=true,
+    morecomment=[l]{//},
+    morecomment=[s]{/*}{*/},
+    morestring=[b]",
+}
+
+%Information to be included in the title page:
+\title[Compilation Principles]{%
+    编译原理大作业 2：语义分析与中间代码生成器
+}
+\subtitle{——类Rust语言的静态语义检查与四元式生成}
+\author[李堂辉, 高胜寒, 冉子易]{%
+    2351078 李堂辉 \\ 2351837 高胜寒 \\ 2352197 冉子易 \\ \small （按学号排序）
+}
+\institute[Tongji University]{
+    同济大学
+}
+\date{\today}
+
+\begin{document}
+
+% ===== 标题页 =====
+\begin{frame}
+    \titlepage
+\end{frame}
+
+% ===== 目录 =====
+\begin{frame}{目录}
+    \tableofcontents
+\end{frame}
+
+% ============================================================
+\section{项目概述}
+
+\begin{frame}{任务要求}
+    \begin{block}{大作业目标}
+        在词法、语法分析基础上，完成静态语义检查与中间代码生成
+    \end{block}
+    \vfill
+    \begin{columns}[T]
+        \begin{column}{0.5\textwidth}
+            \textbf{基本功能}
+            \begin{itemize}
+                \item 静态语义检查（作用域/类型）
+                \item 控制流语法制导翻译
+                \item 生成四元式指令
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \textbf{覆盖规则}
+            \begin{itemize}
+                \item 精准拦截多类静态语义错误
+                \item 生成线性中间代码(IR)
+                \item 实现符号表的嵌套作用域管理
+            \end{itemize}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{技术选型}
+    \begin{columns}[T]
+        \begin{column}{0.5\textwidth}
+            \begin{block}{实现语言}
+                \textbf{Rust}
+                \begin{itemize}
+                    \item 类型安全，内存安全
+                    \item 枚举类型天然适合Token和AST
+                    \item 模式匹配简化分析逻辑
+                \end{itemize}
+            \end{block}
+        \end{column}
+        \begin{column}{0.5\textwidth}
+            \begin{block}{分析方法}
+                \begin{itemize}
+                    \item \textbf{语义检查}：深度优先遍历，符号表栈机制
+                    \item \textbf{代码生成}：语法制导翻译与回填
+                    \item 四元式枚举封装，方便扩展机器码生成
+                \end{itemize}
+            \end{block}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+% ============================================================
+\section{语义分析与符号表}
+
+\begin{frame}{静态语义检查与符号表}
+    \begin{block}{核心机制}
+        在遍历抽象语法树（AST）过程中，维护作用域栈，实现变量重影（Shadowing）与生命周期管理。
+    \end{block}
+    \vfill
+    \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+        \textbf{多级符号表结构}
+        \begin{itemize}
+            \item 使用 \texttt{Vec<HashMap>} 模拟栈结构
+            \item 进入 Block/If/While 时 \texttt{push\_scope}
+            \item 退出时 \texttt{pop\_scope}
+        \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+        \textbf{拦截的静态语义错误}
+        \begin{itemize}
+            \item 使用未声明变量
+            \item 不可变变量被二次赋值
+            \item 类型不一致（赋值、加减运算）
+            \item 越界的 \texttt{break} / \texttt{continue}
+        \end{itemize}
+    \end{column}
+    \end{columns}
+\end{frame}
+
+% ============================================================
+\section{中间代码生成（IR）}
+
+\begin{frame}{四元式 (Quadruple) 格式}
+    \begin{block}{定义}
+        基于三地址码思想，定义了简洁抽象的四元式系统：\\
+        \texttt{( 操作符(Op), 源操作数1(Arg1), 源操作数2(Arg2), 结果(Result) )}
+    \end{block}
+    \vfill
+    \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+        \textbf{操作数 (Arg) 类型}
+        \begin{itemize}
+            \item \texttt{Empty (-)}：无操作数
+            \item \texttt{Int(i64)}：字面量常量
+            \item \texttt{Var(String)}：变量名或分配的地址
+            \item \texttt{Label(String)}：跳转标签 (如 L0)
+            \item \texttt{Temp(usize)}：编译器临时变量 (如 t1)
+        \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+        \textbf{控制流与内存访问指令}
+        \begin{itemize}
+            \item \texttt{JUMP\_IF\_FALSE}：条件不成立跳转
+            \item \texttt{JUMP}：无条件跳转
+            \item \texttt{DEREF / REF}：解引用与取地址
+            \item \texttt{LOAD\_ARRAY}：数组元素的读取
+        \end{itemize}
+    \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{控制流生成：以 while 循环为例}
+    \begin{lstlisting}[language=RustLike, basicstyle=\tiny\ttfamily]
+let start_label = self.new_label();
+let end_label = self.new_label();
+
+self.ir.emit(Op::Label, Arg::Empty, Arg::Empty, Arg::Label(start_label));
+
+let (_, cond_arg) = self.compile_expression(cond);
+self.ir.emit(Op::JumpIfFalse, cond_arg, Arg::Empty, Arg::Label(end_label));
+
+self.loop_stack.push((start_label.clone(), end_label.clone(), None));
+self.compile_block(body);
+self.loop_stack.pop();
+
+self.ir.emit(Op::Jump, Arg::Empty, Arg::Empty, Arg::Label(start_label));
+self.ir.emit(Op::Label, Arg::Empty, Arg::Empty, Arg::Label(end_label));
+    \end{lstlisting}
+    \textbf{控制流回填 (Backpatching)}：利用标号和 \texttt{loop\_stack} 完成 \texttt{break} 和 \texttt{continue} 的指令地址重定向。
+\end{frame}
+
+% ============================================================
+\section{系统架构}
+
+\begin{frame}{模块架构}
+    \begin{center}
+    \resizebox{\linewidth}{!}{
+    \begin{tikzpicture}[
+        box/.style={rectangle, draw, rounded corners, minimum width=2.5cm, minimum height=0.9cm, fill=blue!8, font=\small\bfseries},
+        arrow/.style={->, >=Latex, thick}
+    ]
+        \node[box] (src) at (0,0) {源代码};
+        \node[box] (lex) at (3.5,0) {Parser};
+        \node[box] (tok) at (7,0) {AST};
+        \node[box] (par) at (10.5,0) {Compiler};
+        \node[box] (ast) at (14,0) {四元式};
+        \node[box, fill=green!8] (tkm) at (3.5,-1.5) {ast.rs};
+        \node[box, fill=green!8] (asm) at (10.5,-1.5) {ir.rs};
+
+        \draw[arrow] (src) -- (lex);
+        \draw[arrow] (lex) -- (tok);
+        \draw[arrow] (tok) -- (par);
+        \draw[arrow] (par) -- (ast);
+        \draw[arrow, dashed] (tkm) -- (lex);
+        \draw[arrow, dashed] (asm) -- (par);
+    \end{tikzpicture}
+    }
+    \end{center}
+    \vfill
+    \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+        \begin{itemize}
+            \item \textbf{token.rs}：Token类型定义
+            \item \textbf{lexer.rs}：词法扫描器
+        \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+        \begin{itemize}
+            \item \textbf{ast.rs}：AST节点 + 打印
+            \item \textbf{parser.rs}：递归下降分析器
+        \end{itemize}
+    \end{column}
+    \end{columns}
+\end{frame}
+
+% ============================================================
+\section{测试与演示}
+
+\begin{frame}[fragile]{诊断语义错误}
+    我们设计了包含多种静态语义违规的源程序进行拦截测试。
+    \begin{columns}[T]
+    \begin{column}{0.4\textwidth}
+\begin{lstlisting}[language=RustLike, basicstyle=\tiny\ttfamily]
+fn test_type_mismatch() {
+    let mut a: i32 = 1;
+    let mut b: [i32; 3] = [1, 2, 3];
+    a = b;
+}
+fn test_immutable_assign() {
+    let a: i32 = 1;
+    a = 2;
+}
+\end{lstlisting}
+    \end{column}
+    \begin{column}{0.6\textwidth}
+    \textbf{语义报错诊断输出：}
+\begin{lstlisting}[basicstyle=\tiny\ttfamily,numbers=none]
+[Semantic Error] 赋值类型不一致：左值 I32，右值 Array(I32, 3)
+[Semantic Error] 不可变变量 'a' 不允许被二次赋值
+[Semantic Error] 二元运算类型不匹配: I32 + Tuple([I32, I32])
+[Semantic Error] break 必须出现在循环体内
+[Semantic Error] continue 必须出现在循环体内
+\end{lstlisting}
+    \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{四元式生成：表达式与赋值}
+    \begin{columns}[T]
+    \begin{column}{0.4\textwidth}
+\begin{lstlisting}[language=RustLike, basicstyle=\tiny\ttfamily]
+fn program_7_2(x:i32, y:i32) -> i32 {
+    let mut t:i32 = x*x+x;
+    t = t+x*y;
+    return t;
+}
+\end{lstlisting}
+    \end{column}
+    \begin{column}{0.6\textwidth}
+    \textbf{对应的 IR 输出：}
+\begin{lstlisting}[basicstyle=\tiny\ttfamily,numbers=none]
+program_7_2:
+  1: (  PARAM   ,     -     ,     -     ,     x     )
+  2: (  PARAM   ,     -     ,     -     ,     y     )
+  3: (   MUL    ,     x     ,     x     ,    t21    )
+  4: (   ADD    ,    t21    ,     x     ,    t22    )
+  5: (  ASSIGN  ,    t22    ,     -     ,     t     )
+  6: (   MUL    ,     x     ,     y     ,    t23    )
+  7: (   ADD    ,     t     ,    t23    ,    t24    )
+  8: (  ASSIGN  ,    t24    ,     -     ,     t     )
+  9: (  RETURN  ,     t     ,     -     ,     -     )
+\end{lstlisting}
+    \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{四元式生成：循环跳转指令}
+    \begin{columns}[T]
+    \begin{column}{0.4\textwidth}
+\begin{lstlisting}[language=RustLike, basicstyle=\tiny\ttfamily]
+fn program_5_1(mut n:i32) {
+    while n>0 {
+        n=n-1;
+    }
+}
+\end{lstlisting}
+    \end{column}
+    \begin{column}{0.6\textwidth}
+    \textbf{对应的 IR 输出：}
+\begin{lstlisting}[basicstyle=\tiny\ttfamily,numbers=none]
+program_5_1:
+  1: (  PARAM   ,     -     ,     -     ,     n     )
+L27:
+  3: (    GT    ,     n     ,     0     ,    t13    )
+  4: (JUMP_IF_FALSE,    t13    ,     -     ,    L28    )
+  5: (   SUB    ,     n     ,     1     ,    t14    )
+  6: (  ASSIGN  ,    t14    ,     -     ,     n     )
+  7: (   JUMP   ,     -     ,     -     ,    L27    )
+L28:
+  9: (  RETURN  ,     -     ,     -     ,     -     )
+\end{lstlisting}
+    \end{column}
+    \end{columns}
+\end{frame}
+
+
+
+\begin{frame}{测试结果与指标}
+    \begin{alertblock}{代码生成全覆盖}
+        原 28 个正常测试程序均成功通过静态语义检查，并输出正确的四元式指令序列！
+    \end{alertblock}
+    \vfill
+    \begin{block}{统计信息}
+        \begin{itemize}
+            \item 语义检查：对非法 \texttt{break}、类型错误、未声明变量可直接拦截
+            \item 四元式：精准生成了条件跳转（\texttt{JUMP\_IF\_FALSE}）、算术指令
+            \item 临时变量的 \texttt{t\_id} 以及标号 \texttt{L\_id} 被严格分配与管理
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+% ============================================================
+\section{思考与总结}
+
+
+
+\section{环境与执行}
+
+\begin{frame}{项目编译与执行}
+    \begin{block}{编译环境}
+        \begin{itemize}
+            \item Rust 1.70+, Cargo
+            \item LaTeX (XeLaTeX), latexmk (用于生成报告)
+        \end{itemize}
+    \end{block}
+    \vfill
+    \begin{block}{常用编译与执行命令}
+        \begin{itemize}
+            \item \texttt{cargo build --release} : 编译生成 release 二进制文件
+            \item \texttt{cargo run --release} : 运行内置语法树解析测试
+            \item \texttt{cargo run --release -- tests/test\_all.rs.txt} : 指定外部程序测试
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}{总结}
+    \begin{block}{完成内容}
+        \begin{itemize}
+            \item 在大作业1的框架上开发了\textbf{静态语义分析器}和\textbf{中间代码生成器}
+            \item 利用符号表完美实现了同名变量在嵌套作用域中的精准遮蔽(Shadowing)
+            \item 通过基于栈的标号缓存，实现了\texttt{while, break, continue}的跳转逻辑
+            \item 全面拦截不安全操作（赋值给不可变对象、类型不一致）
+            \item 功能测试与语义测试样例全部满足预期行为
+        \end{itemize}
+    \end{block}
+    \vfill
+    \begin{block}{个人收获}
+        \begin{itemize}
+            \item 深入理解了静态语义约束对保证编程语言安全性的重大意义
+            \item 掌握了控制流如何通过标号和条件跳转拍平到线性的中间代码
+            \item 体会到架构分离（分析器与编译器独立）极大提升了工程的可维护性
+        \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}{参考资料}
+    \begin{itemize}
+        \item 陈火旺. 程序设计语言编译原理（第3版）. 国防工业出版社.
+        \item Alfred V. Aho et al. Compilers: Principles, Techniques and Tools (Second Edition). 赵建华等译. 机械工业出版社.
+        \item The Rust Reference \& Rust By Example.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \begin{center}
+        \Huge 谢谢！
+    \end{center}
+\end{frame}
+
+\end{document}

@@ -1,0 +1,394 @@
+\documentclass[12pt,a4paper]{ctexart}
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{geometry}
+\usepackage{tikz}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{enumitem}
+
+\geometry{left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm}
+
+\usetikzlibrary{automata, positioning, arrows.meta, shapes.multipart, fit}
+
+% 代码样式
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.97,0.97,0.94}
+\definecolor{ruleblue}{rgb}{0.0,0.3,0.7}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\small\ttfamily,
+    breaklines=true,
+    numbers=left,
+    numbersep=5pt,
+    showstringspaces=false,
+    tabsize=4,
+    frame=single,
+    rulecolor=\color{codegray},
+}
+\lstset{style=mystyle}
+
+\lstdefinelanguage{RustLike}{
+    morekeywords={fn, let, mut, if, else, while, for, in, loop, break, continue, return, i32},
+    sensitive=true,
+    morecomment=[l]{//},
+    morecomment=[s]{/*}{*/},
+    morestring=[b]",
+}
+
+\title{\textbf{编译原理大作业 2} \\ \Large 类 Rust 语言语义分析与中间代码生成器设计与实现}
+\author{2351078 李堂辉 \quad 2351837 高胜寒 \quad 2352197 冉子易 \\ 同济大学 \\ \small （按学号排序）}
+\date{\today}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=ruleblue}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{概述}
+
+\subsection{任务描述}
+
+本项目实现了一个面向类Rust语言子集的前端编译分析工具，包括\textbf{编译器与IR生成器}（Lexer）和\textbf{中间代码模块}（Parser）。该工具能够：
+
+\begin{enumerate}
+    \item 在词法和语法分析的基础上，对抽象语法树（四元式序列）进行深度优先遍历，完成静态语义检查（作用域、类型推断、可变性校验等）；
+    \item 诊断静态语义错误，对于未声明变量、类型不一致、常量被修改等错误予以精确定位和报错；
+    \item 对无语义错误的源程序，采用语法制导翻译，生成等价的四元式形式的中间代码（Intermediate Representation）。
+\end{enumerate}
+
+\subsection{实现语言与工具}
+
+\begin{itemize}
+    \item \textbf{实现语言}：Rust
+    \item \textbf{词法与语法分析}：手写状态机扫描器与递归下降分析器
+    \item \textbf{语义分析方法}：维护多级符号表，自底向上属性综合推导
+    \item \textbf{中间代码生成}：采用基于四元式的语法制导翻译与控制流回填
+    \item \textbf{构建工具}：Cargo（Rust标准构建系统）
+\end{itemize}
+
+\subsection{已实现的语法规则}
+
+\begin{table}[H]
+\centering
+\caption{已实现的语法规则概览}
+\begin{tabular}{lll}
+\toprule
+\textbf{编号} & \textbf{规则名称} & \textbf{说明} \\
+\midrule
+0.1 & 变量属性 & \texttt{mut} / 空 \\
+0.2 & 类型 & \texttt{i32}, \texttt{\&T}, \texttt{\&mut T}, \texttt{[T;N]}, \texttt{(T1,T2)} \\
+0.3 & 左值 & 标识符、解引用、数组下标、元组下标 \\
+1.1 & 基础程序 & 程序 $\to$ 声明串 \\
+1.2 & 语句 & 语句串 $\to$ 语句 语句串 \\
+1.3 & 返回语句 & \texttt{return} [表达式] \texttt{;} \\
+1.4 & 函数输入 & 形参列表 \\
+1.5 & 函数输出 & 函数返回类型 \\
+2.0 & 变量声明 & \texttt{let [mut] id [:type]} \\
+2.1 & 变量声明语句 & \texttt{let} 声明 \texttt{;} \\
+2.2 & 赋值语句 & 左值 \texttt{=} 表达式 \texttt{;} \\
+2.3 & 变量声明赋值 & \texttt{let} 声明 \texttt{=} 表达式 \texttt{;} \\
+3.1 & 基本表达式 & 整数、标识符、括号表达式 \\
+3.2 & 比较运算 & \texttt{<, <=, >, >=, ==, !=} \\
+3.3 & 加减运算 & \texttt{+, -} \\
+3.4 & 乘除运算 & \texttt{*, /} \\
+3.5 & 函数调用 & \texttt{id(args)} \\
+4.1 & if 选择 & \texttt{if} 表达式 块 \\
+4.2 & if-else & 增加 \texttt{else} 分支 \\
+4.3 & if-else if & 增加 \texttt{else if} 分支 \\
+5.0 & 循环语句 & while / for / loop \\
+5.1 & while 循环 & \texttt{while} 表达式 块 \\
+5.2 & for 循环 & \texttt{for} 变量 \texttt{in} 可迭代 块 \\
+5.3 & loop 循环 & \texttt{loop} 块 \\
+5.4 & break/continue & 循环控制 \\
+\midrule
+6.1--6.4 & 引用与借用 & 不可变/可变引用、解引用 \\
+7.0--7.4 & 函数表达式块 & 表达式块、选择表达式、循环表达式 \\
+8.1--8.3 & 数组 & 数组类型、数组字面量、数组下标 \\
+9.1--9.3 & 元组 & 元组类型、元组字面量、元组下标 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+% ============================================================
+\section{语义分析原理与设计}
+
+\subsection{符号表的设计与管理}
+
+语义分析的核心是\textbf{符号表}的管理。本项目在 \texttt{compiler.rs} 中设计了作用域敏感的符号表系统。
+为了支持局部作用域和变量重影（Shadowing），符号表使用了基于栈的嵌套结构：
+\begin{lstlisting}[language=RustLike]
+pub struct Compiler {
+    scopes: Vec<HashMap<String, SymbolInfo>>,
+    // ...
+}
+struct SymbolInfo {
+    mutable: bool,
+    ty: Type,
+    arg: Arg, // 在中间代码中的临时变量或分配地址
+}
+\end{lstlisting}
+
+进入函数体、块结构或控制流内部时调用 \texttt{push\_scope()} 创建新的局部作用域映射；退出时调用 \texttt{pop\_scope()}。查找变量时采用从栈顶到栈底倒序查找的策略，完美支持了同名变量的就近遮蔽特性。
+
+\subsection{静态语义检查规则}
+
+我们在遍历抽象语法树（四元式序列）时拦截了多种静态语义错误：
+\begin{enumerate}
+    \item \textbf{变量未声明报错}：使用标识符前未在任何层级作用域找到对应的 \texttt{SymbolInfo}。
+    \item \textbf{不可变变量二次赋值报错}：检查 \texttt{is\_mutable} 字段。
+    \item \textbf{类型不匹配检查}：对于表达式 \texttt{L = R} 或 \texttt{L + R}，递归推导出子树类型后必须相等，否则拦截。
+    \item \textbf{控制流结构约束}：\texttt{break} 和 \texttt{continue} 语句必须在循环体内出现，这通过维护一个 \texttt{loop\_stack} 栈来实现。
+\end{enumerate}
+
+% ============================================================
+\section{中间代码生成原理与设计}
+
+\subsection{四元式格式与定义}
+
+中间代码采用了\textbf{四元式}（Quadruple）的形式，定义如下：
+\begin{center}
+    \texttt{( 操作符(Op), 源操作数1(Arg1), 源操作数2(Arg2), 结果(Result) )}
+\end{center}
+在Rust代码中被定义为枚举结构，其中 \texttt{Op} 包括 \texttt{ADD, SUB, ASSIGN, JUMP, JUMP\_IF\_FALSE, CALL, RETURN, DEREF, LOAD\_ARRAY} 等。操作数可以为空（-），或者是字面量常量、变量名、临时变量 \texttt{tN}、或标号 \texttt{LN}。
+
+\subsection{控制流的语法制导翻译}
+
+以 \texttt{while} 循环为例，其语法制导翻译的执行流程如下：
+\begin{lstlisting}[language=RustLike]
+let start_label = self.new_label();
+let end_label = self.new_label();
+
+// 1. 发射循环起始标号
+self.ir.emit(Op::Label, Arg::Empty, Arg::Empty, Arg::Label(start_label));
+
+// 2. 编译条件表达式
+let (_, cond_arg) = self.compile_expression(cond);
+
+// 3. 条件为假则跳出循环
+self.ir.emit(Op::JumpIfFalse, cond_arg, Arg::Empty, Arg::Label(end_label));
+
+// 4. 将标号压栈供 break/continue 使用
+self.loop_stack.push((start_label, end_label, None));
+self.compile_block(body);
+self.loop_stack.pop();
+
+// 5. 跳转回起始并标定结束
+self.ir.emit(Op::Jump, Arg::Empty, Arg::Empty, Arg::Label(start_label));
+self.ir.emit(Op::Label, Arg::Empty, Arg::Empty, Arg::Label(end_label));
+\end{lstlisting}
+此方案确保了控制流转换成线性序列指令，且标号分配全局唯一。
+
+% ============================================================
+\section{详细设计}
+
+\begin{figure}[H]
+    \centering
+\resizebox{\linewidth}{!}{
+    \begin{tikzpicture}[
+        node distance=2cm and 1cm,
+        block/.style={rectangle, draw, fill=blue!10, text width=6em, text centered, rounded corners, minimum height=3em},
+        arrow/.style={thick, ->, >=stealth}
+    ]
+        % Nodes
+        \node (source) [block, fill=green!10] {源代码 \\ (Source Code)};
+        \node (lexer) [block, right=of source] {编译器与IR生成器 \\ (Lexer)};
+        \node (tokens) [block, fill=yellow!10, right=of lexer] {符号表 \\ (Tokens)};
+        \node (parser) [block, right=of tokens] {中间代码模块 \\ (Parser)};
+        \node (ast) [block, fill=orange!10, right=of parser] {抽象语法树 \\ (四元式序列)};
+        \node (symtab) [block, fill=red!10, below=of parser] {符号表 \\ (Symbol Table)};
+
+        % Arrows
+        \draw [arrow] (source) -- (lexer);
+        \draw [arrow] (lexer) -- (tokens);
+        \draw [arrow] (tokens) -- (parser);
+        \draw [arrow] (parser) -- (ast);
+        \draw [arrow, <->] (parser) -- (symtab);
+        
+        \node [draw, dashed, inner sep=0.5cm, fit=(parser) (symtab)] (sem) {};
+        \node [below=0.1cm of sem, font=\footnotesize] {语义检查集成在解析过程中};
+    \end{tikzpicture}
+}
+    \caption{系统模块架构图}
+    \label{fig:arch}
+\end{figure}
+
+\subsection{编译器与IR生成器详细设计}
+
+\texttt{Compiler} 结构体负责维护符号表作用域及状态，包含以下字段：
+\lstinputlisting[language=RustLike, firstline=13, lastline=23]{(2)rust_compiler/src/compiler.rs}
+
+核心方法 \texttt{compile\_statement()} 的流程：
+\begin{enumerate}
+    \item 采用模式匹配（Pattern Matching）判定当前 AST 语句的类型；
+    \item 遇到变量声明时，向当前作用域 \texttt{scopes.last\_mut()} 插入带有类型和属性的 \texttt{SymbolInfo}；
+    \item 遇到表达式计算时，递归推导表达式树并实时抛出临时变量，检查类型一致性；
+    \item 对于控制流语句（如 \texttt{While} 或 \texttt{If}），申请全局标签，发射 \texttt{JUMP\_IF\_FALSE} 指令控制跳转。
+\end{enumerate}
+
+\subsection{中间代码模块详细设计}
+
+\texttt{IRProgram} 与 \texttt{Quadruple} 结构体包含以下定义：
+\lstinputlisting[language=RustLike, firstline=82, lastline=88]{(2)rust_compiler/src/ir.rs}
+\lstinputlisting[language=RustLike, firstline=100, lastline=103]{(2)rust_compiler/src/ir.rs}
+
+核心指令系统覆盖如下操作：
+
+\begin{table}[H]
+\centering
+\small
+\caption{IR 指令集}
+\begin{tabular}{ll}
+\toprule
+\textbf{指令枚举} & \textbf{说明} \\
+\midrule
+\texttt{Add, Sub, Mul, ...} & 算术与关系运算 \\
+\texttt{Assign} & 赋值 \\
+\texttt{Jump} & 无条件跳转至某标号 \\
+\texttt{JumpIfFalse} & 当条件伪时跳跃 \\
+\texttt{Label} & 标记指令块的首地址 \\
+\texttt{Param, Call, Return} & 函数调用相关操作 \\
+\texttt{LoadArray, StoreArray} & 数组元素的读取与写入 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{四元式序列 节点设计}
+
+四元式序列的顶层结构为 \texttt{Program}，包含多个 \texttt{Declaration}（目前仅支持函数声明）。函数声明包含函数名、参数列表、可选返回类型和函数体（\texttt{Block}）。
+
+语句类型使用Rust枚举表示，包含：\texttt{Empty}, \texttt{ExprStmt}, \texttt{Return}, \texttt{VarDecl}, \texttt{Assign}, \texttt{VarDeclAssign}, \texttt{If}, \texttt{While}, \texttt{For}, \texttt{Loop}, \texttt{Break}, \texttt{Continue}。
+
+表达式类型同样使用枚举，包含：\texttt{IntLiteral}, \texttt{Ident}, \texttt{BinaryOp}, \texttt{UnaryDeref}, \texttt{Ref}, \texttt{MutRef}, \texttt{Call}, \texttt{Index}, \texttt{TupleIndex}, \texttt{ArrayLiteral}, \texttt{TupleLiteral}, \texttt{Range}, \texttt{ExprBlock}, \texttt{IfExpr}, \texttt{LoopExpr}, \texttt{Paren}。
+
+\subsection{错误处理}
+
+分析过程中遇到语义错误时，通过调用 \texttt{self.error()} 记录并汇总抛出。例如，针对文件 \texttt{tests/test\_semantic\_errors.rs.txt} 的测试，编译器能精确定位以下问题：
+
+\begin{itemize}
+    \item \textbf{未声明与作用域越界}：\texttt{左值变量 'a' 未声明}
+    \item \textbf{可变性冲突}：\texttt{不可变变量 'a' 不允许被二次赋值}
+    \item \textbf{类型一致性约束}：\texttt{赋值类型不匹配：左值 I32，右值 Array(I32, 3)}
+    \item \textbf{返回类型约束}：\texttt{返回语句类型空和函数声明类型 I32 不一致}
+    \item \textbf{控制流结构约束}：\texttt{break 必须出现在循环体内}
+\end{itemize}
+
+
+% ============================================================
+\section{测试与验证}
+
+\subsection{测试用例设计}
+
+为了充分展示大作业2中编译器检查错误的能力和代码生成的能力，我们设计了两组测试用例：
+\begin{enumerate}
+    \item \textbf{功能测试集（内置程序 1.1 -- 9.3）}：涵盖赋值、复杂控制流（嵌套if/while/for/loop）、解引用与数组运算。主要用于验证IR生成模块（四元式）的跳转逻辑是否符合控制流原语。
+    \item \textbf{语义错误测试集}：我们在 \texttt{test\_semantic\_errors.rs.txt} 中构造了 7 种静态语义违规，用于检验类型系统和作用域检查器的鲁棒性。
+\end{enumerate}
+
+\subsection{语义错误诊断结果示例}
+
+对于未声明变量和类型不匹配，编译器输出了精准的诊断结果：
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+[Semantic Error] 左值变量 'a' 未声明
+[Semantic Error] 赋值类型不一致：左值 I32，右值 Array(I32, 3)
+[Semantic Error] 不可变变量 'a' 不允许被二次赋值
+[Semantic Error] 二元运算类型不匹配: I32 + Tuple([I32, I32])
+[Semantic Error] break 必须出现在循环体内
+[Semantic Error] continue 必须出现在循环体内
+[Semantic Error] 返回语句类型空和函数声明类型 I32 不一致
+\end{lstlisting}
+
+\subsection{中间代码（四元式）生成示例}
+
+对于 \texttt{while} 循环和判断嵌套的 \texttt{program\_5\_1}：
+\begin{lstlisting}[language=RustLike]
+fn program_5_1(mut n:i32) {
+    while n>0 {
+        n=n-1;
+    }
+}
+\end{lstlisting}
+
+编译器生成的四元式序列（严格控制流标号与临时变量分配）：
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily]
+program_5_1:
+  84: (  PARAM   ,     -     ,     -     ,     n     )
+L27:
+  86: (    GT    ,     n     ,     0     ,    t13    )
+  87: (JUMP_IF_FALSE,    t13    ,     -     ,    L28    )
+  88: (   SUB    ,     n     ,     1     ,    t14    )
+  89: (  ASSIGN  ,    t14    ,     -     ,     n     )
+  90: (   JUMP   ,     -     ,     -     ,    L27    )
+L28:
+  92: (  RETURN  ,     -     ,     -     ,     -     )
+\end{lstlisting}
+可以清晰看出，条件 \texttt{n>0} 对应运算 \texttt{GT}，其假值使得程序跳向循环出口标号 \texttt{L28}；而循环体末尾通过无条件 \texttt{JUMP} 回到标号 \texttt{L27}。这完美还原了语义。
+
+% ============================================================
+\section{环境配置与运行指南}
+
+\subsection{环境配置}
+本项目使用 Rust 编写，编译和运行需要安装 \textbf{Rust 工具链}（1.70+ 版本推荐）。安装方法：
+\begin{lstlisting}[language=bash]
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+\end{lstlisting}
+
+\subsection{编译与测试}
+在项目根目录 \texttt{(2)rust\_compiler/} 下执行以下命令：
+\begin{enumerate}
+    \item \textbf{编译}：运行 \texttt{cargo build --release}。
+    \item \textbf{运行内置测试}：运行 \texttt{cargo run --release}。
+    \item \textbf{测试完整用例}：运行 \texttt{cargo run --release -- tests/test\_all.rs.txt}。
+    \item \textbf{测试语义错误拦截}：运行 \texttt{cargo run --release -- tests/test\_semantic\_errors.rs.txt}，预期会输出由于违反语义检查而导致的错误。
+\end{enumerate}
+
+\section{心得与思考}
+
+\subsection{关于LR(1)无法处理的情况}
+
+PPT中提到“本规则中存在极个别的羁绊会使得LR(1)无法处理”。一个典型的例子是\textbf{表达式块}（规则~7.0/7.1）与\textbf{普通语句块}之间的歧义。当解析器遇到 \texttt{\{} 时，无法仅通过有限的前瞻确定这是一个语句块还是一个可以作为表达式的函数表达式块。
+
+在递归下降分析器中，我们可以通过上下文信息（调用者是语句位置还是表达式位置）来区分这种情况，但在LR(1)分析器中，这种依赖上下文的消歧较难实现。
+
+\subsection{1.4 形参列表的语言}
+
+形参列表 $\langle$形参列表$\rangle \to \langle$形参$\rangle$ $|$ $\langle$形参$\rangle$ \texttt{,} $\langle$形参列表$\rangle$ 可以识别\textbf{至少一个形参}的列表，产生式描述了以逗号分隔的形参序列。结合 $\langle$形参列表$\rangle \to$ 空 的规则，完整支持零个或多个形参的情况。从语言层面看，这是一个正则语言，可用正则表达式描述为 $(\text{形参}(\texttt{,}\text{形参})^*)?$。
+
+\subsection{9.1 元组 vs 8.1 数组的产生式差异}
+
+元组类型比数组类型多了几条产生式，原因在于：
+\begin{enumerate}
+    \item \textbf{数组}的所有元素类型相同，因此类型声明只需 \texttt{[T; N]}，一个类型加一个长度即可；
+    \item \textbf{元组}的每个位置可以有不同的类型，需要显式列出每个元素的类型，因此需要 $\langle$类型列表$\rangle$ 相关的产生式。
+    \item 此外，元组还需要区分 \texttt{(T)} 和 \texttt{(T,)} 的情况——前者是括号括起来的类型，后者是单元素元组。
+\end{enumerate}
+
+
+% ============================================================
+\section{参考资料}
+
+\begin{enumerate}
+    \item 陈火旺. 程序设计语言编译原理（第3版）. 国防工业出版社.
+    \item Alfred V. Aho et al. Compilers: Principles, Techniques and Tools (Second Edition). 赵建华等译. 机械工业出版社.
+    \item The Rust Reference. \url{https://doc.rust-lang.org/reference/}
+    \item Rust By Example. \url{https://doc.rust-lang.org/rust-by-example/}
+    \item Thorsten Ball. \textit{Writing An Interpreter In Go}. 2016.
+\end{enumerate}
+
+\end{document}

@@ -1,0 +1,8 @@
+小组成员（署名需注明按学号排序）
+2351078 李堂辉
+2351837 高胜寒
+2352197 冉子易
+
+课程推荐教材和参考书：
+ 教材：陈火旺，《程序设计语言编译原理》（第三版），国防工业出版社
+ 参考书：Alfred V. Aho et al, Compilers: Principles,Techniques and Tools (Second Edition)，赵建华等译，机械工业出版社

@@ -1,0 +1,8 @@
+[package]
+name = "rust_parser"
+version = "0.1.0"
+edition = "2024"
+authors = ["2351078 李堂辉", "2351837 高胜寒", "2352197 冉子易"]
+description = "同济大学编译原理大作业 2：类 Rust 语言语义分析与中间代码生成器。作者按学号排序。"
+
+[dependencies]
