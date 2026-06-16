@@ -152,34 +152,38 @@
     两个作业共用 AST 作为衔接点，语义检查和 IR 生成在其上继续展开。
 \end{frame}
 
-\begin{frame}{代码入口：第一份 AST 被第二份继续消费}
-    \begin{columns}[T]
-    \begin{column}{0.49\textwidth}
-        \begin{block}{大作业 1}
-            \small
-            \texttt{lexer.rs} 负责字符扫描；\texttt{parser.rs} 负责递归下降；\texttt{ast.rs} 定义统一的程序结构。
-        \end{block}
-        \begin{itemize}
-            \item 输出 Token 序列和 AST 打印。
-            \item 测试按课程规则编号组织。
-        \end{itemize}
-    \end{column}
-    \begin{column}{0.49\textwidth}
-        \begin{block}{大作业 2}
-            \small
-            继续沿用 Lexer、Parser 和 AST，再增加 \texttt{compiler.rs} 与 \texttt{ir.rs}。
-        \end{block}
-        \begin{itemize}
-            \item 语义错误统一进入 \texttt{errors}。
-            \item 合法程序生成四元式 IR。
-        \end{itemize}
-    \end{column}
-    \end{columns}
+\begin{frame}{实现特色：AST 作为两份作业的接口}
+    \begin{table}
+    \centering
+    \small
+    \begin{tabular}{p{3.2cm}p{4.1cm}p{4.6cm}}
+        \toprule
+        \textbf{作业 1 保留的信息} & \textbf{代码落点} & \textbf{作业 2 的使用方式} \\
+        \midrule
+        类型结构 &
+        \begin{tabular}[t]{@{}l@{}}\texttt{Ref/MutRef}\\\texttt{Array/Tuple}\end{tabular} &
+        初始化、赋值、返回值和索引检查 \\
+        左值形态 &
+        \begin{tabular}[t]{@{}l@{}}\texttt{Ident/Deref}\\\texttt{Index/TupleIndex}\end{tabular} &
+        区分变量赋值、解引用赋值和聚合访问 \\
+        控制流结构 &
+        \begin{tabular}[t]{@{}l@{}}\texttt{If/While/For/Loop}\\\texttt{Break/Continue}\end{tabular} &
+        生成标签，并维护 \texttt{loop\_stack} \\
+        表达式结构 &
+        \begin{tabular}[t]{@{}l@{}}\texttt{ExprBlock/IfExpr}\\\texttt{Call}\end{tabular} &
+        返回 \texttt{(Type, Arg)} 继续生成 IR \\
+        \bottomrule
+    \end{tabular}
+    \end{table}
+    \vspace{0.2em}
+    \begin{block}{关键点}
+        AST 在两个工程之间承担稳定接口，语义分析和 IR 生成只处理结构化节点。
+    \end{block}
 \end{frame}
 
 \section{大作业 1：把类 Rust 代码变成结构}
 
-\begin{frame}{类 Rust 子集的结构覆盖}
+\begin{frame}{作业 1 特色：扩展语法保留成可分析结构}
     \begin{columns}[T]
     \begin{column}{0.50\textwidth}
         \begin{block}{覆盖范围}
@@ -194,9 +198,9 @@
     \end{column}
     \begin{column}{0.46\textwidth}
         \begin{itemize}
-            \item 核心难点是让这些结构进入同一棵 AST。
-            \item 后续语义阶段可以继续检查类型、作用域和控制流。
-            \item 所以作业 1 的关键产物是“可继续使用的 AST”。
+            \item 引用、可变引用、数组、元组直接进入 \texttt{Type} 和 \texttt{Expr}。
+            \item 表达式块、\texttt{if} 表达式保留“表达式有值”的语言特征。
+            \item \texttt{while/for/loop} 与 \texttt{break/continue} 为循环栈提供结构入口。
         \end{itemize}
     \end{column}
     \end{columns}
@@ -287,7 +291,7 @@ pub enum Expr {
 
 \section{大作业 2：让 AST 带上语义状态}
 
-\begin{frame}{作业 2 的转折：遍历 AST 时带着状态走}
+\begin{frame}{作业 2 特色：带状态遍历 AST}
     \begin{center}
     \resizebox{0.92\linewidth}{!}{
     \begin{tikzpicture}[
@@ -349,7 +353,7 @@ struct Compiler {
     \end{columns}
 \end{frame}
 
-\begin{frame}{语义检查：围绕 Rust 风格约束}
+\begin{frame}{语义检查：回应要求 PPTX 的易错点}
     \begin{table}
     \centering
     \small
@@ -360,7 +364,7 @@ struct Compiler {
         未声明变量 & \texttt{a = 1;} 但没有声明 & \texttt{lookup\_variable} \\
         不可变变量赋值 & \texttt{let a = 1; a = 2;} & \texttt{mutable} 字段 \\
         类型不匹配 & 数组赋给 \texttt{i32}，或 \texttt{i32 + tuple} & \texttt{Type} 枚举 \\
-        引用/解引用约束 & 对非引用解引用，或写不可变引用 & \texttt{Ref/MutRef} \\
+        引用/解引用约束 & 读解引用、写解引用、非引用解引用 & \texttt{Ref/MutRef} \\
         返回类型 & \texttt{-> i32} 但 \texttt{return;} & 当前函数返回类型 \\
         循环控制 & 循环外 \texttt{break/continue} & \texttt{loop\_stack} \\
         \bottomrule
@@ -518,7 +522,7 @@ L1:
     \end{center}
 \end{frame}
 
-\begin{frame}{非基础结构：数组、引用、调用都有落点}
+\begin{frame}{扩展结构：语义和 IR 都有落点}
     \begin{table}
     \centering
     \small
@@ -529,14 +533,14 @@ L1:
         \texttt{\&x / \&mut x} & \texttt{Ref / MutRef} & 生成 \texttt{REF}，类型变成引用类型 \\
         \texttt{*p} & \texttt{UnaryDeref} & 检查引用类型，生成 \texttt{DEREF} \\
         \texttt{a[i]} & \texttt{Index} & 检查数组类型，读取生成 \texttt{LOAD\_ARRAY} \\
-        \texttt{t.0} & \texttt{TupleIndex} & 检查元组类型并取对应元素类型 \\
+        \texttt{t.0} & \texttt{TupleIndex} & 根据元组类型推导元素类型 \\
         \texttt{foo(a,b)} & \texttt{Call} & 参数生成 \texttt{ARG}，调用生成 \texttt{CALL} \\
         \bottomrule
     \end{tabular}
     \end{table}
     \vspace{0.2em}
     \small
-    这些结构承接作业 1 中较完整的类 Rust 子集，并在 IR 层保留对应的读取、引用、调用和类型检查落点。
+    当前实现把这些结构接到语义/IR 主流程；函数签名检查和数组写入地址计算可作为后续扩展。
 \end{frame}
 
 \section{验证与收束}
